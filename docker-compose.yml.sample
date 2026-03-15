@@ -1,0 +1,40 @@
+services:
+  opendkim:
+    image: instrumentisto/opendkim
+    volumes:
+      - ./keys:/etc/opendkim/keys
+      - ./opendkim.conf:/etc/opendkim/opendkim.conf
+      - ./KeyTable:/etc/opendkim/KeyTable
+      - ./SigningTable:/etc/opendkim/SigningTable
+      - ./TrustedHosts:/etc/opendkim/TrustedHosts
+    expose:
+      - 8891
+    restart: unless-stopped
+    networks:
+      - gerobug_network
+
+  postfix:
+    image: boky/postfix
+    environment:
+      RELAYHOST: "[smtp.server.com]:465"
+      RELAYHOST_USERNAME: "XXX@gerosecurity.com"
+      RELAYHOST_PASSWORD: "XXX"
+      MYNETWORKS: "127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
+      POSTFIX_smtp_tls_security_level: "encrypt"
+      POSTFIX_smtp_tls_wrappermode: "yes" 
+      POSTFIX_milter_default_action: "accept"
+      POSTFIX_smtpd_milters: "inet:opendkim:8891"
+      POSTFIX_non_smtpd_milters: "inet:opendkim:8891"
+      ALLOWED_SENDER_DOMAINS: "gerosecurity.com"
+    expose:
+      - 25
+    depends_on:
+      - opendkim
+    restart: unless-stopped
+    networks:
+      - gerobug_network
+
+networks:
+  gerobug_network:
+    external: true
+    name: gerobug_default

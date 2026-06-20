@@ -133,6 +133,7 @@ collect_info() {
     DEFAULT_DOMAIN="${SMTP_USERNAME#*@}"
     ask "Signing domain" DKIM_DOMAIN "$DEFAULT_DOMAIN"
     ask "DKIM selector" DKIM_SELECTOR "gerobug"
+    ask "Mail hostname" MAIL_HOSTNAME "mail.$DKIM_DOMAIN"
 }
 
 escape_password() {
@@ -221,6 +222,12 @@ ${SUBNET}
 postfix
 EOF
     print_success "TrustedHosts written"
+
+    # sender_canonical - rewrite the sender domain to the signing domain for DKIM/SPF alignment
+    cat > "$SCRIPT_DIR/sender_canonical" <<EOF
+/^(.*)@(.*)\$/    \${1}@${DKIM_DOMAIN}
+EOF
+    print_success "sender_canonical written"
 }
 
 write_compose_file() {
@@ -253,11 +260,20 @@ services:
 
   postfix:
     image: boky/postfix
+    hostname: ${MAIL_HOSTNAME}
+    volumes:
+      - ./sender_canonical:/etc/postfix/sender_canonical:ro
     environment:
       RELAYHOST: "[${SMTP_SERVER}]:${SMTP_PORT}"
       RELAYHOST_USERNAME: "${SMTP_USERNAME}"
       RELAYHOST_PASSWORD: "${ESCAPED_PWD}"
       ALLOWED_SENDER_DOMAINS: "${DKIM_DOMAIN}"
+      POSTFIX_myhostname: "${MAIL_HOSTNAME}"
+      POSTFIX_mydomain: "${DKIM_DOMAIN}"
+      POSTFIX_myorigin: "${DKIM_DOMAIN}"
+      POSTFIX_inet_protocols: "ipv4"
+      POSTFIX_sender_canonical_maps: "regexp:/etc/postfix/sender_canonical"
+      POSTFIX_sender_canonical_classes: "envelope_sender, header_sender"
       MYNETWORKS: "127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16"
       POSTFIX_smtp_tls_security_level: "encrypt"
       POSTFIX_smtp_tls_wrappermode: "${TLS_WRAPPERMODE}"
